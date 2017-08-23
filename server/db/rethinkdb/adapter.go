@@ -111,57 +111,57 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 		rdb.DBDrop("tinode").RunWrite(a.conn)
 	}
 
-	if _, err := rdb.DBCreate("tinode").RunWrite(a.conn); err != nil {
+    if _, err := logStatement("CreateDb", rdb.DBCreate("tinode")).RunWrite(a.conn); err != nil {
 		return err
 	}
 
 	// Users
-	if _, err := rdb.DB("tinode").TableCreate("users", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+	if _, err := logStatement("CreateDb", rdb.DB("tinode").TableCreate("users", rdb.TableCreateOpts{PrimaryKey: "Id"})).RunWrite(a.conn); err != nil {
 		return err
 	}
 	// Create secondary index on User.Tags array so user can be found by tags
-	if _, err := rdb.DB("tinode").Table("users").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
+	if _, err := logStatement("CreateDb", rdb.DB("tinode").Table("users").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true})).RunWrite(a.conn); err != nil {
 		return err
 	}
 	// User authentication records {unique, userid, secret}
-	if _, err := rdb.DB("tinode").TableCreate("auth", rdb.TableCreateOpts{PrimaryKey: "unique"}).RunWrite(a.conn); err != nil {
+	if _, err := logStatement("CreateDb", rdb.DB("tinode").TableCreate("auth", rdb.TableCreateOpts{PrimaryKey: "unique"})).RunWrite(a.conn); err != nil {
 		return err
 	}
 	// Should be able to access user's auth records by user id
-	if _, err := rdb.DB("tinode").Table("auth").IndexCreate("userid").RunWrite(a.conn); err != nil {
+    if _, err := logStatement("CreateDb", rdb.DB("tinode").Table("auth").IndexCreate("userid")).RunWrite(a.conn); err != nil {
 		return err
 	}
 
 	// Subscription to a topic. The primary key is a Topic:User string
-	if _, err := rdb.DB("tinode").TableCreate("subscriptions", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+	if _, err := logStatement("CreateDb", rdb.DB("tinode").TableCreate("subscriptions", rdb.TableCreateOpts{PrimaryKey: "Id"})).RunWrite(a.conn); err != nil {
 		return err
 	}
-	if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreate("User").RunWrite(a.conn); err != nil {
+    if _, err := logStatement("CreateDb", rdb.DB("tinode").Table("subscriptions").IndexCreate("User")).RunWrite(a.conn); err != nil {
 		return err
 	}
-	if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreate("Topic").RunWrite(a.conn); err != nil {
+    if _, err := logStatement("CreateDb", rdb.DB("tinode").Table("subscriptions").IndexCreate("Topic")).RunWrite(a.conn); err != nil {
 		return err
 	}
 
 	// Topic stored in database
-	if _, err := rdb.DB("tinode").TableCreate("topics", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+	if _, err := logStatement("CreateDb", rdb.DB("tinode").TableCreate("topics", rdb.TableCreateOpts{PrimaryKey: "Id"})).RunWrite(a.conn); err != nil {
 		return err
 	}
 
 	// Stored message
-	if _, err := rdb.DB("tinode").TableCreate("messages", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+	if _, err := logStatement("CreateDb", rdb.DB("tinode").TableCreate("messages", rdb.TableCreateOpts{PrimaryKey: "Id"})).RunWrite(a.conn); err != nil {
 		return err
 	}
-	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_SeqId",
+	if _, err := logStatement("CreateDb", rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_SeqId",
 		func(row rdb.Term) interface{} {
 			return []interface{}{row.Field("Topic"), row.Field("SeqId")}
-		}).RunWrite(a.conn); err != nil {
+        })).RunWrite(a.conn); err != nil {
 		return err
 	}
 
 	// Index of unique user contact information as strings, such as "email:jdoe@example.com" or "tel:18003287448":
 	// {Id: <tag>, Source: <uid>} to ensure uniqueness of tags.
-	if _, err := rdb.DB("tinode").TableCreate("tagunique", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+	if _, err := logStatement("CreateDb", rdb.DB("tinode").TableCreate("tagunique", rdb.TableCreateOpts{PrimaryKey: "Id"})).RunWrite(a.conn); err != nil {
 		return err
 	}
 
@@ -182,18 +182,18 @@ func (a *RethinkDbAdapter) UserCreate(user *t.User) (error, bool) {
 		for _, t := range user.Tags {
 			tags = append(tags, tag{Id: t, Source: user.Id})
 		}
-		res, err := rdb.DB(a.dbName).Table("tagunique").Insert(tags).RunWrite(a.conn)
+        res, err := logStatement("UserCreate", rdb.DB(a.dbName).Table("tagunique").Insert(tags)).RunWrite(a.conn)
 		if err != nil || res.Inserted != len(user.Tags) {
 			if res.Inserted > 0 {
 				// Something went wrong, do best effort delete of inserted tags
-				rdb.DB(a.dbName).Table("tagunique").GetAll(user.Tags).
-					Filter(map[string]interface{}{"Source": user.Id}).Delete().RunWrite(a.conn)
+				logStatement("UserCreate", rdb.DB(a.dbName).Table("tagunique").GetAll(user.Tags).
+                             Filter(map[string]interface{}{"Source": user.Id}).Delete()).RunWrite(a.conn)
 			}
 			return err, false
 		}
 	}
-
-	_, err := rdb.DB(a.dbName).Table("users").Insert(&user).RunWrite(a.conn)
+    
+    _, err := logStatement("UserCreate", rdb.DB(a.dbName).Table("users").Insert(&user)).RunWrite(a.conn)
 	if err != nil {
 		return err, false
 	}
@@ -205,13 +205,13 @@ func (a *RethinkDbAdapter) UserCreate(user *t.User) (error, bool) {
 func (a *RethinkDbAdapter) AddAuthRecord(uid t.Uid, authLvl int, unique string,
 	secret []byte, expires time.Time) (error, bool) {
 
-	_, err := rdb.DB(a.dbName).Table("auth").Insert(
+	_, err := logStatement("AddAuthRecord", rdb.DB(a.dbName).Table("auth").Insert(
 		map[string]interface{}{
 			"unique":  unique,
 			"userid":  uid.String(),
 			"authLvl": authLvl,
 			"secret":  secret,
-			"expires": expires}).RunWrite(a.conn)
+            "expires": expires})).RunWrite(a.conn)
 	if err != nil {
 		if rdb.IsConflictErr(err) {
 			return errors.New("duplicate credential"), true
@@ -223,13 +223,13 @@ func (a *RethinkDbAdapter) AddAuthRecord(uid t.Uid, authLvl int, unique string,
 
 // Delete user's authentication record
 func (a *RethinkDbAdapter) DelAuthRecord(unique string) (int, error) {
-	res, err := rdb.DB(a.dbName).Table("auth").Get(unique).Delete().RunWrite(a.conn)
+    res, err := logStatement("AddAuthRecord", rdb.DB(a.dbName).Table("auth").Get(unique).Delete()).RunWrite(a.conn)
 	return res.Deleted, err
 }
 
 // Delete user's all authentication records
 func (a *RethinkDbAdapter) DelAllAuthRecords(uid t.Uid) (int, error) {
-	res, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).Delete().RunWrite(a.conn)
+	res, err := logStatement("AddAuthRecord", rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).Delete()).RunWrite(a.conn)
 	return res.Deleted, err
 }
 
@@ -237,19 +237,19 @@ func (a *RethinkDbAdapter) DelAllAuthRecords(uid t.Uid) (int, error) {
 func (a *RethinkDbAdapter) UpdAuthRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error) {
 	log.Println("Updating for unique", unique)
 
-	res, err := rdb.DB(a.dbName).Table("auth").Get(unique).Update(
+	res, err := logStatement("AddAuthRecord", rdb.DB(a.dbName).Table("auth").Get(unique).Update(
 		map[string]interface{}{
 			"authLvl": authLvl,
 			"secret":  secret,
-			"expires": expires}).RunWrite(a.conn)
+            "expires": expires})).RunWrite(a.conn)
 	return res.Updated, err
 }
 
 // Retrieve user's authentication record
 func (a *RethinkDbAdapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, error) {
 	// Default() is needed to prevent Pluck from returning an error
-	rows, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
-		"userid", "secret", "expires", "authLvl").Default(nil).Run(a.conn)
+	rows, err := logStatement("AddAuthRecord", rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
+        "userid", "secret", "expires", "authLvl").Default(nil)).Run(a.conn)
 	if err != nil {
 		return t.ZeroUid, 0, nil, time.Time{}, err
 	}
@@ -272,7 +272,7 @@ func (a *RethinkDbAdapter) GetAuthRecord(unique string) (t.Uid, int, []byte, tim
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
 func (a *RethinkDbAdapter) UserGet(uid t.Uid) (*t.User, error) {
-	if row, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Run(a.conn); err == nil && !row.IsNil() {
+    if row, err := logStatement("UserGet", rdb.DB(a.dbName).Table("users").Get(uid.String())).Run(a.conn); err == nil && !row.IsNil() {
 		var user t.User
 		if err = row.One(&user); err == nil {
 			return &user, nil
@@ -294,7 +294,7 @@ func (a *RethinkDbAdapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	}
 
 	users := []t.User{}
-	if rows, err := rdb.DB(a.dbName).Table("users").GetAll(uids...).Run(a.conn); err != nil {
+    if rows, err := logStatement("UserGetAll", rdb.DB(a.dbName).Table("users").GetAll(uids...)).Run(a.conn); err != nil {
 		return nil, err
 	} else {
 		var user t.User
@@ -313,9 +313,9 @@ func (a *RethinkDbAdapter) UserDelete(uid t.Uid, soft bool) error {
 	q := rdb.DB(a.dbName).Table("users").Get(uid.String())
 	if soft {
 		now := t.TimeNow()
-		_, err = q.Update(map[string]interface{}{"DeletedAt": now, "UpdatedAt": now}).RunWrite(a.conn)
+		_, err = logStatement("UserDelete", q.Update(map[string]interface{}{"DeletedAt": now, "UpdatedAt": now})).RunWrite(a.conn)
 	} else {
-		_, err = q.Delete().Run(a.conn)
+        _, err = logStatement("UserDelete", q.Delete()).Run(a.conn)
 	}
 	return err
 }
@@ -326,8 +326,8 @@ func (a *RethinkDbAdapter) UserUpdateLastSeen(uid t.Uid, userAgent string, when 
 		UserAgent string
 	}{when, userAgent}
 
-	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).
-		Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
+	_, err := logStatement("UserUpdateLastSeen", rdb.DB(a.dbName).Table("users").Get(uid.String()).
+                           Update(update, rdb.UpdateOpts{Durability: "soft"})).RunWrite(a.conn)
 
 	return err
 }
@@ -349,7 +349,7 @@ func (a *RethinkDbAdapter) ChangePassword(id t.Uid, password string) error {
 
 func (a *RethinkDbAdapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	// FIXME(gene): add Tag re-indexing
-	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(update).RunWrite(a.conn)
+	_, err := logStatement("UserUpdate", rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(update)).RunWrite(a.conn)
 	return err
 }
 
@@ -357,7 +357,7 @@ func (a *RethinkDbAdapter) UserUpdate(uid t.Uid, update map[string]interface{}) 
 
 // TopicCreate creates a topic from template
 func (a *RethinkDbAdapter) TopicCreate(topic *t.Topic) error {
-	_, err := rdb.DB(a.dbName).Table("topics").Insert(&topic).RunWrite(a.conn)
+    _, err := logStatement("TopicCreate", rdb.DB(a.dbName).Table("topics").Insert(&topic)).RunWrite(a.conn)
 	return err
 }
 
@@ -365,7 +365,7 @@ func (a *RethinkDbAdapter) TopicCreate(topic *t.Topic) error {
 func (a *RethinkDbAdapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 	initiator.Id = initiator.Topic + ":" + initiator.User
 	// Don't care if the initiator changes own subscription
-	_, err := rdb.DB(a.dbName).Table("subscriptions").Insert(initiator, rdb.InsertOpts{Conflict: "replace"}).
+	_, err := logStatement("TopicCreateP2P", rdb.DB(a.dbName).Table("subscriptions").Insert(initiator, rdb.InsertOpts{Conflict: "replace"})).
 		RunWrite(a.conn)
 	if err != nil {
 		return err
@@ -373,7 +373,7 @@ func (a *RethinkDbAdapter) TopicCreateP2P(initiator, invited *t.Subscription) er
 
 	// Ensure this is a new subscription. If one already exist, don't overwrite it
 	invited.Id = invited.Topic + ":" + invited.User
-	_, err = rdb.DB(a.dbName).Table("subscriptions").Insert(invited, rdb.InsertOpts{Conflict: "error"}).
+	_, err = logStatement("TopicCreateP2P", rdb.DB(a.dbName).Table("subscriptions").Insert(invited, rdb.InsertOpts{Conflict: "error"})).
 		RunWrite(a.conn)
 	if err != nil {
 		// Is this a duplicate subscription? If so, ifnore it. Otherwise it's a genuine DB error
@@ -389,7 +389,7 @@ func (a *RethinkDbAdapter) TopicCreateP2P(initiator, invited *t.Subscription) er
 
 func (a *RethinkDbAdapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
-	rows, err := rdb.DB(a.dbName).Table("topics").Get(topic).Run(a.conn)
+    rows, err := logStatement("TopicGet", rdb.DB(a.dbName).Table("topics").Get(topic)).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +419,7 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subsc
 	}
 	q = q.Limit(MAX_RESULTS)
 	//log.Printf("RethinkDbAdapter.TopicsForUser q: %+v", q)
-	rows, err := q.Run(a.conn)
+    rows, err := logStatement("TopicsForUser", q).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +462,7 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subsc
 
 	if len(topq) > 0 {
 		// Fetch grp & p2p topics
-		rows, err = rdb.DB(a.dbName).Table("topics").GetAll(topq...).Run(a.conn)
+        rows, err = logStatement("TopicsForUser", rdb.DB(a.dbName).Table("topics").GetAll(topq...)).Run(a.conn)
 		if err != nil {
 			return nil, err
 		}
@@ -488,7 +488,7 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subsc
 
 	// Fetch p2p users and join to p2p tables
 	if len(usrq) > 0 {
-		rows, err = rdb.DB(a.dbName).Table("users").GetAll(usrq...).Run(a.conn)
+        rows, err = logStatement("TopicsForUser", rdb.DB(a.dbName).Table("users").GetAll(usrq...)).Run(a.conn)
 		if err != nil {
 			return nil, err
 		}
@@ -524,7 +524,7 @@ func (a *RethinkDbAdapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Su
 	}
 	q = q.Limit(MAX_RESULTS)
 	//log.Printf("RethinkDbAdapter.UsersForTopic q: %+v", q)
-	rows, err := q.Run(a.conn)
+    rows, err := logStatement("UsersForTopic", q).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -544,7 +544,7 @@ func (a *RethinkDbAdapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Su
 		subs = make([]t.Subscription, 0, len(usrq))
 
 		// Fetch users by a list of subscriptions
-		rows, err = rdb.DB(a.dbName).Table("users").GetAll(usrq...).Run(a.conn)
+        rows, err = logStatement("UsersForTopic", rdb.DB(a.dbName).Table("users").GetAll(usrq...)).Run(a.conn)
 		if err != nil {
 			return nil, err
 		}
@@ -571,8 +571,8 @@ func (a *RethinkDbAdapter) TopicShare(shares []*t.Subscription) (int, error) {
 	}
 	// Subscription could have been marked as deleted (DeletedAt != nil). If it's marked
 	// as deleted, unmark.
-	resp, err := rdb.DB(a.dbName).Table("subscriptions").
-		Insert(shares, rdb.InsertOpts{Conflict: "update"}).RunWrite(a.conn)
+	resp, err := logStatement("TopicShare", rdb.DB(a.dbName).Table("subscriptions").
+                              Insert(shares, rdb.InsertOpts{Conflict: "update"})).RunWrite(a.conn)
 	if err != nil {
 		return resp.Inserted + resp.Replaced, err
 	}
@@ -581,7 +581,7 @@ func (a *RethinkDbAdapter) TopicShare(shares []*t.Subscription) (int, error) {
 }
 
 func (a *RethinkDbAdapter) TopicDelete(topic string) error {
-	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).Delete().RunWrite(a.conn)
+    _, err := logStatement("TopicDelete", rdb.DB(a.dbName).Table("topics").Get(topic).Delete()).RunWrite(a.conn)
 	return err
 }
 
@@ -596,27 +596,27 @@ func (a *RethinkDbAdapter) TopicUpdateOnMessage(topic string, msg *t.Message) er
 	if strings.HasPrefix(topic, "usr") {
 		// Topic is passed as usrABCD, but the 'users' table expectes Id without the 'usr' prefix.
 		user := t.ParseUserId(topic).String()
-		_, err = rdb.DB("tinode").Table("users").Get(user).
-			Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
+		_, err = logStatement("TopicUpdateOnMessage", rdb.DB("tinode").Table("users").Get(user).
+                              Update(update, rdb.UpdateOpts{Durability: "soft"})).RunWrite(a.conn)
 
 		// All other messages
 	} else {
-		_, err = rdb.DB("tinode").Table("topics").Get(topic).
-			Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
+		_, err = logStatement("TopicUpdateOnMessage", rdb.DB("tinode").Table("topics").Get(topic).
+                              Update(update, rdb.UpdateOpts{Durability: "soft"})).RunWrite(a.conn)
 	}
 
 	return err
 }
 
 func (a *RethinkDbAdapter) TopicUpdate(topic string, update map[string]interface{}) error {
-	_, err := rdb.DB("tinode").Table("topics").Get(topic).Update(update).RunWrite(a.conn)
+    _, err := logStatement("TopicUpdate", rdb.DB("tinode").Table("topics").Get(topic).Update(update)).RunWrite(a.conn)
 	return err
 }
 
 // Get a subscription of a user to a topic
 func (a *RethinkDbAdapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error) {
 
-	rows, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Run(a.conn)
+	rows, err := logStatement("SubscriptionGet", rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String())).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -637,8 +637,8 @@ func (a *RethinkDbAdapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscri
 
 // Update time when the user was last attached to the topic
 func (a *RethinkDbAdapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[string]time.Time) error {
-	_, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic+":"+user.String()).
-		Update(map[string]interface{}{"LastSeen": lastSeen}, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
+	_, err := logStatement("SubsLastSeen", rdb.DB(a.dbName).Table("subscriptions").Get(topic+":"+user.String()).
+                           Update(map[string]interface{}{"LastSeen": lastSeen}, rdb.UpdateOpts{Durability: "soft"})).RunWrite(a.conn)
 
 	return err
 }
@@ -655,7 +655,7 @@ func (a *RethinkDbAdapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Sub
 	}
 	q = q.Limit(MAX_RESULTS)
 
-	rows, err := q.Run(a.conn)
+    rows, err := logStatement("SubsForUser", q).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -692,7 +692,7 @@ func (a *RethinkDbAdapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Sub
 	q = q.Limit(MAX_RESULTS)
 	//log.Println("Loading subscription q=", q)
 
-	rows, err := q.Run(a.conn)
+    rows, err := logStatement("SubsForTopic", q).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -720,19 +720,19 @@ func (a *RethinkDbAdapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Sub
 
 // SubsUpdate updates a single subscription.
 func (a *RethinkDbAdapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
-	_, err := rdb.DB(a.dbName).Table("subscriptions").
-		Get(topic + ":" + user.String()).Update(update).RunWrite(a.conn)
+	_, err := logStatement("SubsUpdate", rdb.DB(a.dbName).Table("subscriptions").
+                           Get(topic + ":" + user.String()).Update(update)).RunWrite(a.conn)
 	return err
 }
 
 // SubsDelete marks subscription as deleted.
 func (a *RethinkDbAdapter) SubsDelete(topic string, user t.Uid) error {
 	now := t.TimeNow()
-	_, err := rdb.DB(a.dbName).Table("subscriptions").
+	_, err := logStatement("SubsDelete", rdb.DB(a.dbName).Table("subscriptions").
 		Get(topic + ":" + user.String()).Update(map[string]interface{}{
 		"UpdatedAt": now,
 		"DeletedAt": now,
-	}).RunWrite(a.conn)
+        })).RunWrite(a.conn)
 	// _, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Delete().RunWrite(a.conn)
 	return err
 }
@@ -744,8 +744,8 @@ func (a *RethinkDbAdapter) SubsDelForTopic(topic string) error {
 		"UpdatedAt": now,
 		"DeletedAt": now,
 	}
-	_, err := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic).
-		Update(update).RunWrite(a.conn)
+	_, err := logStatement("SubsDelForTopic", rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic).
+                           Update(update)).RunWrite(a.conn)
 	return err
 }
 
@@ -755,8 +755,8 @@ func (a *RethinkDbAdapter) FindSubs(uid t.Uid, query []interface{}) ([]t.Subscri
 	// Query may contain redundant records, i.e. the same email twice.
 	// User could be matched on multiple tags, i.e on email and phone#. Thus the query may
 	// return duplicate users. Thus the need for distinct.
-	if rows, err := rdb.DB(a.dbName).Table("users").GetAllByIndex("Tags", query...).Limit(MAX_RESULTS).
-		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").Distinct().Run(a.conn); err != nil {
+	if rows, err := logStatement("FindSubs", rdb.DB(a.dbName).Table("users").GetAllByIndex("Tags", query...).Limit(MAX_RESULTS).
+                                 Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").Distinct()).Run(a.conn); err != nil {
 		return nil, err
 	} else {
 		index := make(map[string]struct{})
@@ -800,7 +800,7 @@ func (a *RethinkDbAdapter) FindSubs(uid t.Uid, query []interface{}) ([]t.Subscri
 // Messages
 func (a *RethinkDbAdapter) MessageSave(msg *t.Message) error {
 	msg.SetUid(store.GetUid())
-	_, err := rdb.DB(a.dbName).Table("messages").Insert(msg).RunWrite(a.conn)
+    _, err := logStatement("MessageSave", rdb.DB(a.dbName).Table("messages").Insert(msg)).RunWrite(a.conn)
 	return err
 }
 
@@ -810,7 +810,7 @@ func (a *RethinkDbAdapter) MessageGetAll(topic string, forUser t.Uid, opts *t.Br
 	q := rdb.DB(a.dbName).Table("messages")
 	q = addOptions(q, topic, "Topic_SeqId", opts)
 
-	rows, err := q.Run(a.conn)
+    rows, err := logStatement("MessageGetAll", q).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -839,10 +839,10 @@ func (a *RethinkDbAdapter) MessageDeleteAll(topic string, clear int) error {
 	if clear < 0 {
 		maxval = rdb.MaxVal
 	}
-	_, err := rdb.DB(a.dbName).Table("messages").
+	_, err := logStatement("MessageDeleteAll", rdb.DB(a.dbName).Table("messages").
 		Between([]interface{}{topic, 0}, []interface{}{topic, maxval},
 			rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
-		Delete().RunWrite(a.conn)
+                           Delete()).RunWrite(a.conn)
 
 	return err
 }
@@ -854,14 +854,14 @@ func (a *RethinkDbAdapter) MessageDeleteList(topic string, forUser t.Uid, hard b
 		indexVals = append(indexVals, []interface{}{topic, seq})
 	}
 	if hard {
-		_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
+		_, err = logStatement("MessageDeleteList", rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
 			Update(map[string]interface{}{"DeletedAt": t.TimeNow(),
-				"Content": nil}).RunWrite(a.conn)
+                                          "Content": nil})).RunWrite(a.conn)
 	} else {
-		_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
+		_, err = logStatement("MessageDeleteList", rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
 			Update(map[string]interface{}{"DeletedFor": rdb.Row.Field("DeletedFor").Append(&t.SoftDelete{
 				User:      forUser.String(),
-				Timestamp: t.TimeNow()})}).
+                Timestamp: t.TimeNow()})})).
 			RunWrite(a.conn)
 	}
 
@@ -898,8 +898,8 @@ func addOptions(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.T
 		upper = []interface{}{value, rdb.MaxVal}
 	}
 
-	return q.Between(lower, upper, rdb.BetweenOpts{Index: index}).
-		OrderBy(rdb.OrderByOpts{Index: rdb.Desc(index)}).Limit(limit)
+	return logStatement("addOptions", q.Between(lower, upper, rdb.BetweenOpts{Index: index}).
+                        OrderBy(rdb.OrderByOpts{Index: rdb.Desc(index)})).Limit(limit)
 }
 
 func deviceHasher(deviceId string) string {
@@ -913,11 +913,11 @@ func deviceHasher(deviceId string) string {
 // Device management for push notifications
 func (a *RethinkDbAdapter) DeviceUpsert(user t.Uid, def *t.DeviceDef) error {
 	hash := deviceHasher(def.DeviceId)
-	_, err := rdb.DB(a.dbName).Table("users").Get(user.String()).
+	_, err := logStatement("DeviceUpsert", rdb.DB(a.dbName).Table("users").Get(user.String()).
 		Update(map[string]interface{}{
 			"Devices": map[string]*t.DeviceDef{
 				hash: def,
-			}}).RunWrite(a.conn)
+            }})).RunWrite(a.conn)
 	return err
 }
 
@@ -928,8 +928,8 @@ func (a *RethinkDbAdapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef,
 	}
 
 	// {Id: "userid", Devices: {"hash1": {..def1..}, "hash2": {..def2..}}
-	rows, err := rdb.DB(a.dbName).Table("users").GetAll(ids...).Pluck("Id", "Devices").
-		Default(nil).Limit(MAX_RESULTS).Run(a.conn)
+	rows, err := logStatement("DeviceGetAll", rdb.DB(a.dbName).Table("users").GetAll(ids...).Pluck("Id", "Devices").
+                              Default(nil).Limit(MAX_RESULTS)).Run(a.conn)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -965,8 +965,8 @@ func (a *RethinkDbAdapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef,
 }
 
 func (a *RethinkDbAdapter) DeviceDelete(uid t.Uid, deviceId string) error {
-	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Replace(rdb.Row.Without(
-		map[string]string{"Devices": deviceHasher(deviceId)})).RunWrite(a.conn)
+	_, err := logStatement("DeviceDelete", rdb.DB(a.dbName).Table("users").Get(uid.String()).Replace(rdb.Row.Without(
+        map[string]string{"Devices": deviceHasher(deviceId)}))).RunWrite(a.conn)
 	return err
 }
 
