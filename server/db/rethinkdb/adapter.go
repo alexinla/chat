@@ -223,13 +223,13 @@ func (a *RethinkDbAdapter) AddAuthRecord(uid t.Uid, authLvl int, unique string,
 
 // Delete user's authentication record
 func (a *RethinkDbAdapter) DelAuthRecord(unique string) (int, error) {
-    res, err := logStatement("AddAuthRecord", rdb.DB(a.dbName).Table("auth").Get(unique).Delete()).RunWrite(a.conn)
+    res, err := logStatement("elAuthRecord", rdb.DB(a.dbName).Table("auth").Get(unique).Delete()).RunWrite(a.conn)
 	return res.Deleted, err
 }
 
 // Delete user's all authentication records
 func (a *RethinkDbAdapter) DelAllAuthRecords(uid t.Uid) (int, error) {
-	res, err := logStatement("AddAuthRecord", rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).Delete()).RunWrite(a.conn)
+	res, err := logStatement("DelAllAuthRecords", rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).Delete()).RunWrite(a.conn)
 	return res.Deleted, err
 }
 
@@ -237,7 +237,7 @@ func (a *RethinkDbAdapter) DelAllAuthRecords(uid t.Uid) (int, error) {
 func (a *RethinkDbAdapter) UpdAuthRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error) {
 	log.Println("Updating for unique", unique)
 
-	res, err := logStatement("AddAuthRecord", rdb.DB(a.dbName).Table("auth").Get(unique).Update(
+	res, err := logStatement("UpdAuthRecord", rdb.DB(a.dbName).Table("auth").Get(unique).Update(
 		map[string]interface{}{
 			"authLvl": authLvl,
 			"secret":  secret,
@@ -248,7 +248,7 @@ func (a *RethinkDbAdapter) UpdAuthRecord(unique string, authLvl int, secret []by
 // Retrieve user's authentication record
 func (a *RethinkDbAdapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, error) {
 	// Default() is needed to prevent Pluck from returning an error
-	rows, err := logStatement("AddAuthRecord", rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
+	rows, err := logStatement("GetAuthRecord", rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
         "userid", "secret", "expires", "authLvl").Default(nil)).Run(a.conn)
 	if err != nil {
 		return t.ZeroUid, 0, nil, time.Time{}, err
